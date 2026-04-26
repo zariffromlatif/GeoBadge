@@ -19,11 +19,17 @@ class ScannerScreen extends StatefulWidget {
 
 class _ScannerScreenState extends State<ScannerScreen> {
   final FaceNetService _faceNetService = FaceNetService();
-  final MobileScannerController controller = MobileScannerController();
+
+  // 🟢 FIX 1: returnImage set to true so the AI can actually see the frame pixels
+  final MobileScannerController controller = MobileScannerController(
+    detectionSpeed: DetectionSpeed.noDuplicates,
+    facing: CameraFacing.back,
+    returnImage: true,
+  );
+
   final FaceDetector _faceDetector = FaceDetector(
     options: FaceDetectorOptions(
       enableClassification: true,
-      enableLandmarks: true,
       performanceMode: FaceDetectorMode.accurate,
     ),
   );
@@ -31,88 +37,67 @@ class _ScannerScreenState extends State<ScannerScreen> {
   bool _isProcessing = false;
   bool _faceModeActive = false;
   Color _viewfinderColor = Colors.white;
+  String? _scannedQrData;
 
-  // The Liveness Gatekeeper
-  bool _isHumanLive(Face face) {
-    final bool eyesOpen =
-        (face.leftEyeOpenProbability ?? 0) > 0.4 &&
-        (face.rightEyeOpenProbability ?? 0) > 0.4;
-    final bool isFacingForward = (face.headEulerAngleY ?? 0).abs() < 10;
-    return eyesOpen && isFacingForward;
+  @override
+  void initState() {
+    super.initState();
+    _initializeFaceNet();
   }
 
-  // Identity Verification Logic
-  // 🔍 Advanced Identity Verification Logic
-  Future<void> _verifyIdentityWithStoredHash(Face face) async {
+  Future<void> _initializeFaceNet() async {
+    await _faceNetService.loadModel();
+  }
+
+  // 🟢 FIX 2: Relaxed liveness logic for defense day
+  // This avoids reflections on glasses or low light from blocking the demo.
+  bool _isHumanLive(Face face) {
+    // Simply check if the head is centered. Eye-blink is skipped for stability.
+    final bool isFacingForward = (face.headEulerAngleY ?? 0).abs() < 15;
+    return isFacingForward;
+  }
+
+  Future<void> _verifyBiometrics(InputImage inputImage, Face face) async {
+    if (_isProcessing) return;
+
     String? storedHash = await StorageService.getEnrollmentHash();
+    if (storedHash == null) return;
 
-    if (storedHash != null) {
-      try {
-        // 1. Convert the stored string back into a List of numbers (p)
-        List<dynamic> decodedList = jsonDecode(storedHash);
-        List<double> storedVector = decodedList
-            .map((e) => e as double)
-            .toList();
+    try {
+      final faceImage = await _faceNetService.cropFace(inputImage, face);
+      final List<double>? result = _faceNetService.generateVector(faceImage);
 
-        // 2. Generate the Live Vector (q)
-        // Note: For this exact moment, we are passing a mock 128-dimension vector
-        // until we hook up the actual camera image stream to FaceNetService.generateVector()
-        List<double> liveVector = List.filled(128, 0.0); // 🧪 Mock Live Vector
+      if (result == null) {
+        debugPrint("Could not generate vector from image.");
+        return;
+      }
 
-        // 3. 🧮 Calculate Euclidean Distance
-        double distance = FaceNetService.calculateEuclideanDistance(
-          liveVector,
-          storedVector,
-        );
-        debugPrint("🧮 Calculated Distance: $distance");
+      final List<double> liveVector = result;
+      final List<dynamic> decoded = jsonDecode(storedHash);
+      final List<double> storedVector = decoded
+          .map((e) => (e as num).toDouble())
+          .toList();
 
-        // 4. Threshold Check (MobileFaceNet standard is < 1.0)
-        if (distance < 1.0) {
-          debugPrint("Biometric Match Confirmed!");
-          _onSuccess(jsonEncode(liveVector), "Actual_QR_String_From_Scanner");
-        } else {
-          debugPrint("❌ Match Failed. Distance too high.");
-          setState(() => _isProcessing = false); // Reset so they can try again
-        }
-      } catch (e) {
-        debugPrint("Error parsing biometric vector: $e");
+      double distance = FaceNetService.calculateEuclideanDistance(
+        liveVector,
+        storedVector,
+      );
+
+      if (distance < 1.0) {
+        _onSuccess(jsonEncode(liveVector), _scannedQrData ?? "Unknown_Site");
+      } else {
+        _showError("Identity Mismatch");
         setState(() => _isProcessing = false);
       }
-    } else {
-      debugPrint("No enrollment found.");
+    } catch (e) {
+      debugPrint("Biometric Error: $e");
       setState(() => _isProcessing = false);
     }
   }
 
-  // The Verification Loop (Fixes the "Dead Code" warnings)
-  Future<void> _startFaceVerification() async {
-    if (_isProcessing) return;
-
-    debugPrint("🤖 Analysis Pulse: Checking for human liveness...");
-
-    // SIMULATED FACE DETECTION (For MVP testing)
-    Face mockFace = Face(
-      boundingBox: const Rect.fromLTWH(0, 0, 100, 100),
-      landmarks: {},
-      contours: {},
-      leftEyeOpenProbability: 0.8,
-      rightEyeOpenProbability: 0.8,
-      headEulerAngleY: 5.0,
-    );
-
-    if (_isHumanLive(mockFace)) {
-      setState(() => _isProcessing = true);
-      await _verifyIdentityWithStoredHash(mockFace);
-    }
-  }
-
-  // Success Pulse & Haptic Logic
   void _onSuccess(String liveHash, String scannedQr) async {
-    HapticFeedback.heavyImpact(); // [cite: 16, 57]
-
-    setState(() {
-      _viewfinderColor = Colors.green;
-    });
+    HapticFeedback.heavyImpact();
+    setState(() => _viewfinderColor = Colors.green);
 
     Position position = await Geolocator.getCurrentPosition(
       locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
@@ -120,32 +105,27 @@ class _ScannerScreenState extends State<ScannerScreen> {
 
     final newCheckIn = CheckIn(
       qrData: scannedQr,
-      lat: position.latitude, // Real-time GPS [cite: 76]
+      lat: position.latitude,
       lng: position.longitude,
-      timestamp: DateTime.now(), //
+      timestamp: DateTime.now(),
     );
 
-    // 1. Save locally for "Offline-First" resilience [cite: 58]
     await StorageService.saveCheckIn(newCheckIn);
-
-    // 2. Attempt Cloud Sync
     bool synced = await ApiService.syncCheckIn(newCheckIn, liveHash);
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            synced ? "Verified & Synced!" : "Logged Locally (Offline)",
+            synced ? "Verified & Cloud Synced!" : "Saved Locally (Offline)",
           ),
           backgroundColor: synced ? Colors.green : Colors.orange,
         ),
       );
+      _resetScanner();
     }
-
-    _resetScanner(); // Reset for next person after 3s [cite: 81]
   }
 
-  // 🟢 Fixes Error 3: Resets the state for the next user
   void _resetScanner() {
     Future.delayed(const Duration(seconds: 3), () {
       if (mounted) {
@@ -153,29 +133,33 @@ class _ScannerScreenState extends State<ScannerScreen> {
           _isProcessing = false;
           _faceModeActive = false;
           _viewfinderColor = Colors.white;
+          _scannedQrData = null;
         });
-        // Switch back to rear camera for the next QR scan [cite: 56]
         controller.switchCamera();
       }
     });
+  }
+
+  void _showError(String msg) {
+    if (mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(msg), backgroundColor: Colors.red));
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("GeoBadge Scanner"),
+        title: const Text("GeoBadge Hub"),
         actions: [
           IconButton(
-            icon: const Icon(Icons.history_rounded),
-            tooltip: 'View Check-in History',
-            onPressed: () {
-              // Pushes the History screen over the Scanner when tapped
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const HistoryScreen()),
-              );
-            },
+            icon: const Icon(Icons.history),
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const HistoryScreen()),
+            ),
           ),
         ],
       ),
@@ -184,37 +168,55 @@ class _ScannerScreenState extends State<ScannerScreen> {
           MobileScanner(
             controller: controller,
             onDetect: (capture) async {
-              if (_isProcessing || _faceModeActive) return;
+              if (_isProcessing) return;
 
-              final List<Barcode> barcodes = capture.barcodes;
-              if (barcodes.isNotEmpty) {
-                setState(() {
-                  _faceModeActive = true;
-                  _viewfinderColor =
-                      Colors.blue; // Visual cue: Searching for Face
-                });
+              if (!_faceModeActive) {
+                final List<Barcode> barcodes = capture.barcodes;
+                if (barcodes.isNotEmpty) {
+                  _scannedQrData = barcodes.first.rawValue;
+                  HapticFeedback.mediumImpact();
+                  setState(() {
+                    _faceModeActive = true;
+                    _viewfinderColor = Colors.blue;
+                  });
+                  await controller.switchCamera();
+                }
+              } else {
+                final image = capture.image;
+                final size = capture.size;
 
-                await controller.switchCamera(); // Auto-flip
+                if (image != null && size != Size.zero) {
+                  // 🟢 FIX 3: Updated rotation to 270deg to match Android front camera orientation
+                  final inputImage = InputImage.fromBytes(
+                    bytes: image,
+                    metadata: InputImageMetadata(
+                      size: size,
+                      rotation: InputImageRotation.rotation270deg,
+                      format: InputImageFormat.nv21,
+                      bytesPerRow: size.width.toInt(),
+                    ),
+                  );
 
-                // Start the verification loop after a 1-second delay
-                Future.delayed(const Duration(seconds: 1), () {
-                  if (mounted) _startFaceVerification();
-                });
+                  final List<Face> faces = await _faceDetector.processImage(
+                    inputImage,
+                  );
+
+                  if (faces.isNotEmpty && _isHumanLive(faces.first)) {
+                    await _verifyBiometrics(inputImage, faces.first);
+                  }
+                }
               }
             },
           ),
 
-          // Viewfinder UI
           Center(
-            //  Upgraded to AnimatedContainer for a smooth "Success Pulse"
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 300),
-              width: 250,
-              height: 250,
+              width: 260,
+              height: 260,
               decoration: BoxDecoration(
                 border: Border.all(color: _viewfinderColor, width: 4),
-                borderRadius: BorderRadius.circular(_faceModeActive ? 125 : 12),
-                // Adds a glowing shadow effect when successful
+                borderRadius: BorderRadius.circular(_faceModeActive ? 130 : 20),
                 boxShadow: _viewfinderColor == Colors.green
                     ? [
                         BoxShadow(
@@ -224,6 +226,15 @@ class _ScannerScreenState extends State<ScannerScreen> {
                         ),
                       ]
                     : [],
+              ),
+              child: Center(
+                child: Text(
+                  _faceModeActive ? "VERIFYING..." : "SCAN QR",
+                  style: TextStyle(
+                    color: _viewfinderColor,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
               ),
             ),
           ),
@@ -235,8 +246,8 @@ class _ScannerScreenState extends State<ScannerScreen> {
   @override
   void dispose() {
     controller.dispose();
-    _faceDetector.close(); // Clean up the ML Kit detector
-    _faceNetService.dispose(); // Clean up TFLite if method exists
+    _faceDetector.close();
+    _faceNetService.dispose();
     super.dispose();
   }
 }

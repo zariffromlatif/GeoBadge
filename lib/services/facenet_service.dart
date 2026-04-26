@@ -1,4 +1,5 @@
 import 'dart:math';
+import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import 'package:tflite_flutter/tflite_flutter.dart';
 import 'package:flutter/foundation.dart';
 import 'package:image/image.dart' as img;
@@ -22,6 +23,29 @@ class FaceNetService {
     } catch (e) {
       debugPrint("Failed to load TFLite model: $e");
     }
+  }
+
+  Future<img.Image> cropFace(InputImage inputImage, Face face) async {
+    // 1. Extract the raw bytes from the camera frame
+    final bytes = inputImage.bytes;
+
+    // 2. Decode the full image
+    img.Image? fullImage = img.decodeImage(bytes!);
+
+    // 3. Get the bounding box from the ML Kit face detection
+    final rect = face.boundingBox;
+
+    // 4. Crop the image to just the face area
+    img.Image croppedFace = img.copyCrop(
+      fullImage!,
+      x: rect.left.toInt(),
+      y: rect.top.toInt(),
+      width: rect.width.toInt(),
+      height: rect.height.toInt(),
+    );
+
+    // 5. Resize to 112x112 (The exact input size MobileFaceNet requires)
+    return img.copyResize(croppedFace, width: 112, height: 112);
   }
 
   // 2. The Core Generation Engine
