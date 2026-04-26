@@ -49,7 +49,7 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("✅ Face Enrollment Successful!")),
       );
-      //ADD THIS: Tell the app to refresh and send you to the Scanner
+      //Tell the app to refresh and send you to the Scanner
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (context) => const AuthWrapper()),

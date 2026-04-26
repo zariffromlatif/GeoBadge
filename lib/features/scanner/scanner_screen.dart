@@ -5,6 +5,10 @@ import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import 'package:geobadge/services/storage_service.dart';
 import 'package:geobadge/models/check_in.dart';
 import 'package:geobadge/features/history/history_screen.dart';
+import 'package:geobadge/services/facenet_service.dart';
+import 'dart:convert';
+import 'package:geobadge/services/api_service.dart';
+import 'package:geolocator/geolocator.dart';
 
 class ScannerScreen extends StatefulWidget {
   const ScannerScreen({super.key});
@@ -14,6 +18,7 @@ class ScannerScreen extends StatefulWidget {
 }
 
 class _ScannerScreenState extends State<ScannerScreen> {
+  final FaceNetService _faceNetService = FaceNetService();
   final MobileScannerController controller = MobileScannerController();
   final FaceDetector _faceDetector = FaceDetector(
     options: FaceDetectorOptions(
@@ -27,13 +32,6 @@ class _ScannerScreenState extends State<ScannerScreen> {
   bool _faceModeActive = false;
   Color _viewfinderColor = Colors.white;
 
-  @override
-  void dispose() {
-    controller.dispose();
-    _faceDetector.close();
-    super.dispose();
-  }
-
   // The Liveness Gatekeeper
   bool _isHumanLive(Face face) {
     final bool eyesOpen =
@@ -44,14 +42,44 @@ class _ScannerScreenState extends State<ScannerScreen> {
   }
 
   // Identity Verification Logic
+  // 🔍 Advanced Identity Verification Logic
   Future<void> _verifyIdentityWithStoredHash(Face face) async {
     String? storedHash = await StorageService.getEnrollmentHash();
 
     if (storedHash != null) {
-      debugPrint("✅ Biometric Match Confirmed!");
-      _onSuccess();
+      try {
+        // 1. Convert the stored string back into a List of numbers (p)
+        List<dynamic> decodedList = jsonDecode(storedHash);
+        List<double> storedVector = decodedList
+            .map((e) => e as double)
+            .toList();
+
+        // 2. Generate the Live Vector (q)
+        // Note: For this exact moment, we are passing a mock 128-dimension vector
+        // until we hook up the actual camera image stream to FaceNetService.generateVector()
+        List<double> liveVector = List.filled(128, 0.0); // 🧪 Mock Live Vector
+
+        // 3. 🧮 Calculate Euclidean Distance
+        double distance = FaceNetService.calculateEuclideanDistance(
+          liveVector,
+          storedVector,
+        );
+        debugPrint("🧮 Calculated Distance: $distance");
+
+        // 4. Threshold Check (MobileFaceNet standard is < 1.0)
+        if (distance < 1.0) {
+          debugPrint("Biometric Match Confirmed!");
+          _onSuccess(jsonEncode(liveVector), "Actual_QR_String_From_Scanner");
+        } else {
+          debugPrint("❌ Match Failed. Distance too high.");
+          setState(() => _isProcessing = false); // Reset so they can try again
+        }
+      } catch (e) {
+        debugPrint("Error parsing biometric vector: $e");
+        setState(() => _isProcessing = false);
+      }
     } else {
-      // If no match, reset processing state so it can try again
+      debugPrint("No enrollment found.");
       setState(() => _isProcessing = false);
     }
   }
@@ -79,34 +107,46 @@ class _ScannerScreenState extends State<ScannerScreen> {
   }
 
   // Success Pulse & Haptic Logic
-  void _onSuccess() async {
-    // Trigger heavy vibration for the "Zero-Click" sensory confirmation
-    HapticFeedback.heavyImpact();
+  void _onSuccess(String liveHash, String scannedQr) async {
+    HapticFeedback.heavyImpact(); // [cite: 16, 57]
 
     setState(() {
       _viewfinderColor = Colors.green;
     });
 
-    // Create the check-in record
-    final newCheckIn = CheckIn(
-      qrData: "Ghorashal_Factory_PRAN",
-      lat: 23.7704,
-      lng: 90.3586,
-      timestamp: DateTime.now(),
+    Position position = await Geolocator.getCurrentPosition(
+      locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
     );
 
+    final newCheckIn = CheckIn(
+      qrData: scannedQr,
+      lat: position.latitude, // Real-time GPS [cite: 76]
+      lng: position.longitude,
+      timestamp: DateTime.now(), //
+    );
+
+    // 1. Save locally for "Offline-First" resilience [cite: 58]
     await StorageService.saveCheckIn(newCheckIn);
+
+    // 2. Attempt Cloud Sync
+    bool synced = await ApiService.syncCheckIn(newCheckIn, liveHash);
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("✅ Check-in Verified & Logged!"),
-          backgroundColor: Colors.green,
+        SnackBar(
+          content: Text(
+            synced ? "Verified & Synced!" : "Logged Locally (Offline)",
+          ),
+          backgroundColor: synced ? Colors.green : Colors.orange,
         ),
       );
     }
 
-    // Optional: Auto-reset the scanner after 3 seconds for the next person
+    _resetScanner(); // Reset for next person after 3s [cite: 81]
+  }
+
+  // 🟢 Fixes Error 3: Resets the state for the next user
+  void _resetScanner() {
     Future.delayed(const Duration(seconds: 3), () {
       if (mounted) {
         setState(() {
@@ -114,7 +154,8 @@ class _ScannerScreenState extends State<ScannerScreen> {
           _faceModeActive = false;
           _viewfinderColor = Colors.white;
         });
-        controller.switchCamera(); // Switch back to the rear camera
+        // Switch back to rear camera for the next QR scan [cite: 56]
+        controller.switchCamera();
       }
     });
   }
@@ -189,5 +230,13 @@ class _ScannerScreenState extends State<ScannerScreen> {
         ],
       ),
     );
+  }
+
+  @override
+  void dispose() {
+    controller.dispose();
+    _faceDetector.close(); // Clean up the ML Kit detector
+    _faceNetService.dispose(); // Clean up TFLite if method exists
+    super.dispose();
   }
 }
