@@ -1,0 +1,72 @@
+============================================================
+           AI USAGE DECLARATION
+============================================================
+
+Name: Md. Zarif Latif
+Student ID: 24341187
+Assignment: GEOBADGE PROJECT
+Date: 30/04/2026
+
+------------------------------------------------------------
+1. AI TOOLS USED (check all that apply)
+------------------------------------------------------------
+[ ] None
+[ ] ChatGPT
+[ ] GitHub Copilot
+[Y] Google Gemini
+[ ] Claude
+[ ] Cursor
+[ ] Other: ________________
+
+------------------------------------------------------------
+2. PURPOSE OF AI USE (check all that apply)
+------------------------------------------------------------
+[ ] Learning/understanding concepts
+[Y] Debugging my code
+[Y] Generating code snippets
+[ ] Writing text content
+[Y] Design/styling ideas
+[ ] Image generation
+[ ] Other: ________________
+
+------------------------------------------------------------
+3. DESCRIPTION OF AI USE
+------------------------------------------------------------
+Briefly describe what you used AI for and how:
+AI was utilized as a technical collaborator throughout the development lifecycle of GeoBadge. Specifically, I used AI to:
+
+Architectural Planning: Refined the "Zero-Click" system design and optimized the distributed communication between the Flutter frontend and FastAPI backend.
+
+Complex Mathematical Implementation: Assisted in the accurate coding of the Haversine Formula to ensure precise geofence calculations.
+
+Environment Debugging: Provided critical troubleshooting for low-level build failures, including Gradle v1 embedding removal and JDK 21 environment variable configurations.
+
+Security Hardening: Guided the implementation of AES-GCM encryption via the Android Keystore to ensure hardware-backed identity persistence.
+
+Regionalization Strategy: Evaluated cloud deployment regions (Singapore AP-Southeast-1) to minimize latency for users in Bangladesh.
+
+
+------------------------------------------------------------
+4. AI-ASSISTED SECTIONS
+------------------------------------------------------------
+List specific files/sections where AI helped significantly:
+
+File: api_service.dart Section: Location permission handshake logic and encrypted Secure Storage integration.
+File: main.py[Backend] Section: Haversine distance calculation and dynamic Supabase site-lookup logic.
+File: android/app/build.gradle Section: Upgrading SDK versions and resolving native dependency conflicts for release builds.
+
+------------------------------------------------------------
+5. DECLARATION
+------------------------------------------------------------
+I declare that:
+- This disclosure is complete and accurate
+- I understand all code in my submission
+- I can explain and modify my work if asked
+- I take full responsibility for my submission
+
+Signature: _Zarif____
+Date: __30/04/2026___
+
+============================================================
+Save as: docs/AI_Declaration.txt
+============================================================
