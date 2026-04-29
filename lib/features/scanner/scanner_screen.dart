@@ -111,7 +111,10 @@ class _ScannerScreenState extends State<ScannerScreen> {
     );
 
     await StorageService.saveCheckIn(newCheckIn);
-    bool synced = await ApiService.syncCheckIn(newCheckIn, liveHash);
+
+    // FIX 3: Read the REAL employee ID instead of using a hardcoded value
+    final employeeId = await StorageService.getEmployeeId() ?? "UNKNOWN";
+    bool synced = await ApiService.syncCheckIn(newCheckIn, liveHash, employeeId);
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(

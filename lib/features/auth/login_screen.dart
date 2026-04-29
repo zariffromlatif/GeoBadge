@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:geobadge/services/storage_service.dart';
+import 'package:geobadge/services/api_service.dart';
 import 'package:geobadge/features/auth/auth_wrapper.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -12,23 +13,48 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _idController = TextEditingController();
   final TextEditingController _passController = TextEditingController();
+  bool _isLoading = false;
 
+  // FIX 1: Real login validation against the Hub API
   void _handleLogin() async {
-    // SIMULATED AUTH: In production, this hits your Web Hub backend
-    if (_idController.text.isNotEmpty && _passController.text.isNotEmpty) {
-      // Save the fake token to "bond" the phone to the user
-      await StorageService.saveAuthToken("TOKEN_XYZ_123");
+    if (_idController.text.isEmpty || _passController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please enter both fields.")),
+      );
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    // Call the real backend API for authentication
+    final result = await ApiService.login(
+      _idController.text.trim(),
+      _passController.text.trim(),
+    );
+
+    setState(() => _isLoading = false);
+
+    if (result != null && result['status'] == 'success') {
+      // Save auth token and the REAL employee ID
+      await StorageService.saveAuthToken("TOKEN_${_idController.text}");
+      await StorageService.saveEmployeeId(_idController.text.trim());
 
       if (mounted) {
-        // The AuthWrapper will detect the token and move to Enrollment!
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text("Login Successful!")));
-
-        //ADD THIS: Tell the app to refresh the routing logic
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Welcome, ${result['user']?['name'] ?? _idController.text}!")),
+        );
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(builder: (context) => const AuthWrapper()),
+        );
+      }
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Invalid credentials. Contact HR."),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     }
@@ -67,15 +93,24 @@ class _LoginScreenState extends State<LoginScreen> {
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
-                onPressed: _handleLogin,
+                onPressed: _isLoading ? null : _handleLogin,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.green,
                   padding: const EdgeInsets.all(15),
                 ),
-                child: const Text(
-                  "LOGIN",
-                  style: TextStyle(color: Colors.white),
-                ),
+                child: _isLoading
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          color: Colors.white,
+                          strokeWidth: 2,
+                        ),
+                      )
+                    : const Text(
+                        "LOGIN",
+                        style: TextStyle(color: Colors.white),
+                      ),
               ),
             ),
           ],

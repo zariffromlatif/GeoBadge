@@ -8,6 +8,7 @@ class StorageService {
   static const String _enrolledKey = 'is_enrolled';
   static const String _historyKey = 'checkin_history';
   static const String _faceHashKey = 'enrollment_hash';
+  static const String _employeeIdKey = 'employee_id';
 
   // Fixes the scanner_screen.dart error
   static Future<void> saveCheckIn(CheckIn checkIn) async {
@@ -58,6 +59,18 @@ class StorageService {
   static Future<bool> isEnrolled() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getBool(_enrolledKey) ?? false;
+  }
+
+  // FIX 3: Save the authenticated employee's ID
+  static Future<void> saveEmployeeId(String id) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_employeeIdKey, id);
+  }
+
+  // FIX 3: Retrieve the authenticated employee's ID
+  static Future<String?> getEmployeeId() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_employeeIdKey);
   }
 
   static Future<void> logout() async {
