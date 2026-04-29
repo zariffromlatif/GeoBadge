@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../services/storage_service.dart';
+import 'package:geobadge/core/storage_service.dart';
 import '../../models/check_in.dart';
 import 'package:intl/intl.dart'; // Run 'flutter pub add intl' for date formatting
 import 'package:url_launcher/url_launcher.dart';

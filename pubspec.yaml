@@ -34,21 +34,22 @@ dependencies:
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
-  camera: ^0.10.5+5 # Access to the hardware
+  camera: ^0.12.0+1 # Access to the hardware
   google_mlkit_face_detection: ^0.13.2
   geolocator: ^14.0.2 # For Location Validation
-  mobile_scanner: ^5.2.0 # Fast QR recognition
-  flutter_secure_storage: ^9.0.0 # Encrypted Credential Vault
+  mobile_scanner: ^7.2.0 # Fast QR recognition
+  flutter_secure_storage: ^10.0.0 # Encrypted Credential Vault
   provider: ^6.1.1 # State management (keeping it simple for MVP)
-  firebase_core: ^2.24.2
+  firebase_core: ^4.7.0
   shared_preferences: ^2.3.2
   intl: ^0.20.2
   url_launcher: ^6.3.1
-  permission_handler: ^11.3.1
+  permission_handler: ^12.0.1
   tflite_flutter: ^0.12.1 # Run the face recognition model
   image: ^4.1.3 # convert the camera frame into a tensor array
   http: ^1.2.0
-  flutter_launcher_icons: "^0.13.1"
+  flutter_launcher_icons: ^0.14.4
+  vibration: ^3.1.8 # Granular haptic feedback
 
 flutter_launcher_icons:
   android: "launcher_icon"

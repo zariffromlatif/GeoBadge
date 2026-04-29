@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:geobadge/services/storage_service.dart';
 import 'package:geobadge/services/api_service.dart';
-import 'package:geobadge/features/auth/auth_wrapper.dart';
+import 'package:geobadge/features/scanner/scanner_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -15,105 +14,161 @@ class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _passController = TextEditingController();
   bool _isLoading = false;
 
-  // FIX 1: Real login validation against the Hub API
+  /// --- 🔐 THE ACTIVATION LOGIC ---
   void _handleLogin() async {
-    if (_idController.text.isEmpty || _passController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please enter both fields.")),
-      );
+    final id = _idController.text.trim();
+    final pass = _passController.text.trim();
+
+    if (id.isEmpty || pass.isEmpty) {
+      _showSnackBar("Required: Employee ID & Password", Colors.orange);
       return;
     }
 
     setState(() => _isLoading = true);
 
-    // Call the real backend API for authentication
-    final result = await ApiService.login(
-      _idController.text.trim(),
-      _passController.text.trim(),
-    );
+    // This calls the API which internally saves the ID to the Android Keystore
+    final bool success = await ApiService.login(id, pass);
 
     setState(() => _isLoading = false);
 
-    if (result != null && result['status'] == 'success') {
-      // Save auth token and the REAL employee ID
-      await StorageService.saveAuthToken("TOKEN_${_idController.text}");
-      await StorageService.saveEmployeeId(_idController.text.trim());
-
+    if (success) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Welcome, ${result['user']?['name'] ?? _idController.text}!")),
-        );
+        _showSnackBar("DEVICE ACTIVATED", Colors.blueAccent);
+
+        // Push to Scanner and remove Login from the navigation stack forever
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (context) => const AuthWrapper()),
+          MaterialPageRoute(builder: (context) => const ScannerScreen()),
         );
       }
     } else {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("Invalid credentials. Contact HR."),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+      _showSnackBar("Invalid Credentials. Check with Admin.", Colors.red);
     }
+  }
+
+  void _showSnackBar(String message, Color color) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          message,
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
+        backgroundColor: color,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
-      body: Padding(
-        padding: const EdgeInsets.all(30.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.security, size: 80, color: Colors.green),
-            const SizedBox(height: 20),
-            const Text(
-              "GeoBadge Login",
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-            ),
-            const Text(
-              "Enter credentials provided by HR",
-              style: TextStyle(color: Colors.grey),
-            ),
-            const SizedBox(height: 40),
-            TextField(
-              controller: _idController,
-              decoration: const InputDecoration(labelText: "Employee ID"),
-            ),
-            TextField(
-              controller: _passController,
-              decoration: const InputDecoration(labelText: "Password"),
-              obscureText: true,
-            ),
-            const SizedBox(height: 40),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: _isLoading ? null : _handleLogin,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green,
-                  padding: const EdgeInsets.all(15),
-                ),
-                child: _isLoading
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                          color: Colors.white,
-                          strokeWidth: 2,
-                        ),
-                      )
-                    : const Text(
-                        "LOGIN",
-                        style: TextStyle(color: Colors.white),
-                      ),
+      backgroundColor: Colors.black, // OLED Optimized
+      body: SingleChildScrollView(
+        child: Container(
+          height: MediaQuery.of(context).size.height,
+          padding: const EdgeInsets.symmetric(horizontal: 40),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // 1. Industrial Iconography
+              const Icon(
+                Icons.qr_code_2_rounded,
+                size: 60,
+                color: Colors.blueAccent,
               ),
-            ),
-          ],
+              const SizedBox(height: 20),
+
+              // 2. Branding
+              const Text(
+                "GEOBADGE\nACTIVATION",
+                style: TextStyle(
+                  fontSize: 32,
+                  fontWeight: FontWeight.w900,
+                  color: Colors.white,
+                  letterSpacing: 1.2,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                "Secure identity binding for site presence.",
+                style: TextStyle(
+                  color: Colors.white..withValues(alpha: 0.5),
+                  fontSize: 14,
+                ),
+              ),
+              const SizedBox(height: 50),
+
+              // 3. Input Fields (Dark Theme)
+              _buildTextField(
+                controller: _idController,
+                label: "EMPLOYEE ID",
+                icon: Icons.badge_outlined,
+              ),
+              const SizedBox(height: 20),
+              _buildTextField(
+                controller: _passController,
+                label: "ACCESS PASSWORD",
+                icon: Icons.lock_outline,
+                isPassword: true,
+              ),
+
+              const SizedBox(height: 50),
+
+              // 4. Action Button
+              SizedBox(
+                width: double.infinity,
+                height: 60,
+                child: ElevatedButton(
+                  onPressed: _isLoading ? null : _handleLogin,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blueAccent,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    elevation: 0,
+                  ),
+                  child: _isLoading
+                      ? const CircularProgressIndicator(color: Colors.white)
+                      : const Text(
+                          "ACTIVATE DEVICE",
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 1.5,
+                          ),
+                        ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTextField({
+    required TextEditingController controller,
+    required String label,
+    required IconData icon,
+    bool isPassword = false,
+  }) {
+    return TextField(
+      controller: controller,
+      obscureText: isPassword,
+      style: const TextStyle(color: Colors.white),
+      decoration: InputDecoration(
+        labelText: label,
+        labelStyle: TextStyle(
+          color: Colors.white..withValues(alpha: 0.4),
+          fontSize: 12,
+        ),
+        prefixIcon: Icon(icon, color: Colors.blueAccent, size: 20),
+        enabledBorder: UnderlineInputBorder(
+          borderSide: BorderSide(color: Colors.white..withValues(alpha: 0.1)),
+        ),
+        focusedBorder: const UnderlineInputBorder(
+          borderSide: BorderSide(color: Colors.blueAccent),
         ),
       ),
     );
