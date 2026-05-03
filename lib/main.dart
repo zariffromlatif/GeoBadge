@@ -1,14 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:geobadge/features/scanner/scanner_screen.dart';
-import 'package:geobadge/features/auth/login_screen.dart'; // We will build this next
+import 'package:geobadge/features/auth/login_screen.dart';
+import 'package:geobadge/features/auth/splash_screen.dart';
 import 'package:geobadge/services/api_service.dart';
 
 void main() async {
-  // Ensure Flutter engine is ready before checking secure storage
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Set system UI to match the industrial OLED look
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
@@ -16,29 +15,37 @@ void main() async {
     ),
   );
 
-  // 🔐 Check if the OnePlus 5 Keystore already has an identity
-  final bool isSetup = await ApiService.isUserSetup();
-
-  runApp(GeoBadgeApp(isSetup: isSetup));
+  runApp(const GeoBadgeApp());
 }
 
-class GeoBadgeApp extends StatelessWidget {
-  final bool isSetup;
-  const GeoBadgeApp({super.key, required this.isSetup});
+class GeoBadgeApp extends StatefulWidget {
+  const GeoBadgeApp({super.key});
+
+  @override
+  State<GeoBadgeApp> createState() => _GeoBadgeAppState();
+}
+
+class _GeoBadgeAppState extends State<GeoBadgeApp> {
+  bool? _isSetup;
+
+  @override
+  void initState() {
+    super.initState();
+    ApiService.isUserSetup().then((v) {
+      if (mounted) setState(() => _isSetup = v);
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'GeoBadge',
-
-      // 🎨 The "Industrial Beast Mode" Theme
-      // Optimized for the OnePlus 5 OLED display to save battery and look sharp
       theme: ThemeData(
         brightness: Brightness.dark,
         scaffoldBackgroundColor: Colors.black,
         primaryColor: Colors.blueAccent,
-        fontFamily: 'Roboto', // Clean, industrial font
+        fontFamily: 'Roboto',
         appBarTheme: const AppBarTheme(
           backgroundColor: Colors.black,
           elevation: 0,
@@ -50,10 +57,11 @@ class GeoBadgeApp extends StatelessWidget {
           ),
         ),
       ),
-
-      // 🚦 The Switchboard Logic
-      // Direct-to-Scanner if registered, otherwise Onboarding.
-      home: isSetup ? const ScannerScreen() : const LoginScreen(),
+      home: _isSetup == null
+          ? const SplashUI()
+          : _isSetup!
+          ? const ScannerScreen()
+          : const LoginScreen(),
     );
   }
 }

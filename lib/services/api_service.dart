@@ -4,10 +4,36 @@ import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:geobadge/core/constants.dart';
+import 'package:geobadge/core/storage_service.dart';
+import 'package:geobadge/models/check_in.dart';
 
 class ApiService {
   static final String _baseUrl = "${AppConstants.baseUrl}/v1";
   static const _storage = FlutterSecureStorage();
+
+  /// FastAPI shape: `{ "detail": "..." }` or validation list.
+  static String _parseFastApiDetail(String body, {String fallback = "Verification Failed"}) {
+    try {
+      final decoded = jsonDecode(body);
+      if (decoded is Map<String, dynamic> && decoded["detail"] != null) {
+        final Object? d = decoded["detail"];
+        if (d is String) {
+          return d;
+        }
+        if (d is List) {
+          for (final item in d) {
+            if (item is Map<String, dynamic> && item["msg"] != null) {
+              return item["msg"].toString();
+            }
+            if (item is String) {
+              return item;
+            }
+          }
+        }
+      }
+    } catch (_) {}
+    return fallback;
+  }
 
   /// --- 🔐 PHASE 1: ONE-TIME ONBOARDING ---
   static Future<bool> login(String employeeId, String password) async {
@@ -83,29 +109,56 @@ class ApiService {
         body: jsonEncode(payload),
       );
 
-      final decodedResponse = jsonDecode(response.body);
-
       if (response.statusCode == 200) {
+        final Map<String, dynamic> decodedResponse;
+        try {
+          decodedResponse = jsonDecode(response.body) as Map<String, dynamic>;
+        } catch (_) {
+          return {"success": false, "message": "INVALID SERVER RESPONSE"};
+        }
         debugPrint(
           "🚀 Success: Check-in Verified at ${decodedResponse['distance_m']}m",
         );
+        final ts = DateTime.now();
+        await StorageService.saveCheckIn(
+          CheckIn(
+            qrData: siteId,
+            lat: position.latitude,
+            lng: position.longitude,
+            timestamp: ts,
+          ),
+        );
         return {"success": true, "message": decodedResponse['message']};
-      } else {
-        // This captures the 'Outside Geofence' message from Render
-        debugPrint("⚠️ Denied: ${decodedResponse['detail']}");
+      }
+
+      // 400: duplicate check-in, bad payload, etc. — body is `{ "detail": "..." }`
+      if (response.statusCode == 400) {
+        final detail = _parseFastApiDetail(response.body);
+        debugPrint("⚠️ Denied (400): $detail");
         return {
           "success": false,
-          "message": decodedResponse['detail'].toString().toUpperCase(),
+          "message": detail.toUpperCase(),
         };
       }
+
+      // 403 geofence, 404 unknown site, 401, 5xx, …
+      final detail = _parseFastApiDetail(response.body);
+      debugPrint("⚠️ Denied (${response.statusCode}): $detail");
+      return {
+        "success": false,
+        "message": detail.toUpperCase(),
+      };
     } catch (e) {
       debugPrint("❌ Transmission Error Detail: $e");
 
       // Determine if it's a timeout, a network fail, or a logic error
       String errorMsg = "CONNECTION ERROR";
-      if (e.toString().contains("TimeoutException"))
+      if (e.toString().contains("TimeoutException")) {
         errorMsg = "GPS TIMEOUT: TRY AGAIN";
-      if (e.toString().contains("permission")) errorMsg = "PERMISSION ERROR";
+      }
+      if (e.toString().contains("permission")) {
+        errorMsg = "PERMISSION ERROR";
+      }
 
       return {"success": false, "message": errorMsg};
     }
