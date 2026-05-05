@@ -1,42 +1,71 @@
-# 🛡️ GeoBadge
+# GeoBadge
 
-**A High-Velocity, Fraud-Proof Zero-Click Attendance Ecosystem**
+GeoBadge is a Flutter-based attendance app built to reduce buddy punching and streamline field check-ins using geofencing, QR scanning, and face-based verification.
 
-Developed as a final-year Computer Science thesis project at BRAC University, GeoBadge is designed to eliminate "buddy punching" and administrative payroll lag. By combining geofencing, dynamic QR codes, and passive biometric verification, it provides a "Zero-Click" user experience that respects employee privacy while maintaining absolute data integrity.
+## What It Does
 
-## 🚀 Milestone 2: Core Engine Implementation
+- Secure login and one-time onboarding flow
+- QR-based site check-in
+- GPS validation before check-in submission
+- Face verification and passive liveness signals
+- Local check-in history for quick audit visibility
+- Haptic feedback and status messaging for fast user response
 
-This repository represents the **Milestone 2** submission, encompassing the core frontend architecture, state management, and localized biometric logic.
+## Tech Stack
 
-### Key Features Implemented:
+- Flutter / Dart
+- `camera`
+- `mobile_scanner`
+- `google_mlkit_face_detection`
+- `geolocator`
+- `flutter_secure_storage`
+- `shared_preferences`
+- `http`
 
-- **The Gatekeeper (AuthWrapper):** A persistent state management system that seamlessly routes the user between Login, Enrollment, and the Scanner based on encrypted local storage flags.
-- **Professional Onboarding:** A branded Splash Screen and secure Login interface for initial HR credential verification.
-- **Privacy-First Face Enrollment:** A one-time setup that captures facial landmarks and converts them into a 512-character mathematical Biometric Vector, ensuring actual photos are never saved.
-- **The "Zero-Click" Scanner:** Automatically initiates the back-camera upon launch. Once a valid site QR is detected, it triggers a sub-800ms camera flip to verify the user.
-- **Passive Liveness Detection:** Integrates Google ML Kit to analyze blink probability (`leftEyeOpenProbability` / `rightEyeOpenProbability`) and head orientation (`headEulerAngleY`) to prevent photo-based spoofing.
-- **Sensory Feedback Loop:** Utilizes the `flutter/services` package to trigger heavy haptic impact and a smooth green UI pulse upon successful verification.
-- **Local Audit Trail:** An integrated SQLite/SharedPreferences history screen logging atomic timestamps and GPS coordinates for audit-ready reporting.
+## Prerequisites
 
-## 🧮 The Mathematics of Verification
+- Flutter SDK (stable)
+- Android Studio or VS Code with Flutter tooling
+- Android device or emulator (camera + location support recommended)
 
-GeoBadge relies on mathematical vector comparison rather than image saving to ensure BIPA and GDPR compliance. Identity verification is calculated using the **Euclidean Distance** between the stored enrollment vector ($p$) and the live scan vector ($q$):
+## Getting Started
 
-$$d(p, q) = \sqrt{\sum_{i=1}^{n} (q_i - p_i)^2}$$
+```bash
+git clone https://github.com/zariffromlatif/GeoBadge.git
+cd geobadge
+flutter pub get
+flutter run
+```
 
-If the distance $d$ falls below the security threshold (e.g., $d < 0.6$), the identity is cryptographically confirmed.
+## Backend Configuration
 
-## 🛠️ Technology Stack
+The API base URL is configured in `lib/core/constants.dart`.
 
-- **Framework:** Flutter (Dart)
-- **Computer Vision:** Google ML Kit (Face Detection)
-- **Scanning Engine:** Mobile Scanner
-- **Local Storage:** SharedPreferences (Data serialization via JSON)
-- **Target OS:** Android (Tested on hardware level)
+Default:
 
-## ⚙️ Installation & Running Locally
+```dart
+static const String baseUrl = "https://geobadge-hub.onrender.com";
+```
 
-1. Clone the repository:
-   ```bash
-   git clone [https://github.com/zariffromlatif/GeoBadge.git](https://github.com/zariffromlatif/GeoBadge.git)
-   ```
+For local backend development, update this value to your local server URL.
+
+## Core Flow
+
+1. User logs in with employee credentials.
+2. App stores setup state in secure storage.
+3. User scans a site QR code.
+4. App checks GPS service + permissions and fetches live coordinates.
+5. App posts check-in payload to backend.
+6. App stores successful entries in local history.
+
+## Project Structure
+
+- `lib/core`: constants and shared utilities
+- `lib/services`: API and storage service layer
+- `lib/models`: data models
+- `assets`: model and media assets
+
+## Notes
+
+- This project is currently optimized for Android testing.
+- Ensure camera and location permissions are granted before check-in.
